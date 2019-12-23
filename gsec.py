@@ -1,131 +1,200 @@
 #!/usr/bin/env python
 
 import argparse
-import os, sys
+import os
 import numpy as np
+import pandas as pd
 import collections
+from functools import reduce
 
-parser = argparse.ArgumentParser(description="Removes a specified number of bases from the end of each gene in a BBMap base coverage file")
-
-parser.add_argument("-basecov", "-i",
-                    help="Base coverage file.",
-                    type=str)
-
-parser.add_argument("-min_trim_size", "-s",
-                    help="Minimum number of bases to trim from both ends.",
-                    type=int)
-
-parser.add_argument("-trim_fraction", "-f", default=1, type=float, nargs='+',
-                    help="Fraction of bases to retain from center of gene. Set\
-                    to 1 to use all bases minus minimal terminal cutoff. Provide\
-                    one or more numbers between 0 and 1, separated by spaces.")
-
-parser.add_argument("-basecov_text", "-b", default="basecov",
-                    help="Text string used to indicate basecov files if a directory is given as the input for -basecov.",
-                    type=str)
-
-parser.add_argument("-exclude_gene", "-e", default="trimmed_18S_MLSG_ trimmed_28S_MLSG_ trimmed_COI_MLSG_",
-                    help="Optional list of gene names to ignore.",
-                    type=str)
-
-parser.add_argument('--print-cov', dest='print_cov', action='store_true', help="Print detailed coverage information")
-
-parser.add_argument('--print-basecov', dest='print_basecov', action='store_true', help="Print long form base coverage")
-
-parser.add_argument('--print-stats', dest='print_stats', action='store_true', help="Suppress stats printout")
-
-parser.add_argument('--inexact-match', dest='inexact_match', action='store_true', help="Allow exclude genes to support inexact matches. Useful for excluding groups of genes containing particular substrings.")
-
-parser.set_defaults(print_stats=False, print_cov=False, print_basecov=False, inexact_match=False)
-
-# def check_fraction(value):
-#     fvalue = float(value)
-#     if fvalue > 1 or fvalue < 0:
-#         raise argparse.ArgumentTypeError("%s is an invalid fraction value. Enter a number between 0 and 1" % fvalue)
-#     return fvalue
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 
 
-# parser.add_argument("-trim_fraction", "-f", default=1, type=check_fraction,
-#                     help="Fraction of bases to retain from center of gene. Set\
-#                     to 1 to use all bases minus minimal terminal cutoff")
+class Specimen:
+    def __init__(self, in_file):
+        self.in_file = in_file
+        self.exclude_genes = []
+        self.init_cov = None
+        self.trim_cov = None
 
-if len(sys.argv[1:])==0:
-    parser.print_help()
-    # parser.print_usage() # for just the usage line
-    parser.exit()
-args = parser.parse_args()
+        self.sp_name = self.get_sp_name()
 
-in_basecov = args.basecov
-trim_size = args.min_trim_size
-ignore_gene = args.exclude_gene
-trim_fraction = args.trim_fraction
+    def check_basecov(self, line_sample):
+        self.line_sample = line_sample
+        try:
+            self.gene_id, self.pos, self.cov = self.line_sample.strip().split()
+            if self.gene_id in self.exclude_genes:
+                return False
+            try:
+                self.pos = int(self.pos)
+            except ValueError:
+                print("Second column in basecov file not an integer: {}".format(self.pos))
+            try:
+                self.cov = int(self.cov)
+            except ValueError:
+                print("Third column in basecov file not an integer: {}".format(self.cov))
+        except ValueError:
+            print("Check basecov file {}".format(self.in_file))
+        return self.gene_id, self.pos, self.cov
 
-inexact_match = args.inexact_match
-print_trim_covs = args.print_cov
-print_basecov = args.print_basecov
-print_stats = args.print_stats
-basecov_text = args.basecov_text
+    def get_sp_name(self):
+        self.sp_name = os.path.split(self.in_file)[1]
+        if "_basecov.txt" in self.sp_name:
+            self.sp_name = self.sp_name.replace("_basecov.txt", "")
+        return self.sp_name
 
-perbase = True
+    def initialize_loci(self):
+        '''Opens basecov file and populates dict of genes and coverages,
+        and renames, if necessary'''
+
+        self.locus_dict = collections.OrderedDict()
+
+        with open(self.in_file, 'r') as f:
+            self.lines = [x for x in f if "#" not in x]
+            for self.line in self.lines:
+                self.gene_id, self.pos, self.cov = self.check_basecov(self.line)
+                if self.gene_id:
+                    self.populate_db(self.locus_dict, self.gene_id, self.pos, self.cov)
+
+    def populate_db(self, locus_dict, gene_id, pos, cov):
+        self.locus_dict = locus_dict
+        self.id = id
+        self.pos = pos
+        self.cov = cov
+
+        if self.gene_id not in self.locus_dict.keys():
+            self.locus_dict[self.gene_id] = Locus(self.gene_id, self.pos, self.cov)
+            # print("Init {} with pos {}, cov {}".format(self.gene_id, self.pos, self.cov))
+        else:
+            self.locus = self.locus_dict[self.gene_id]
+            self.locus.pos.append(self.pos)
+            self.locus.cov.append(self.cov)
+            # print("adding to pos {}, cov {} to {}".format(self.pos, self.cov, self.gene_id))
+
+    def trim_loci(self):
+        for key, value in self.locus_dict.items():
+            # print("Trimming {}".format(key))
+            self.locus_dict[key].trim_bases(trim, mint)
+
+    def sp_mean(self):
+        self.all_covs = []
+        self.col_name_init = "{}_Init".format(self.sp_name)
+        self.col_name_trim = "{}".format(self.sp_name)
+
+        for key, value in self.locus_dict.items():
+            self.locus = self.locus_dict[key]
+            # print(self.locus.init_mean, self.locus.trim_mean)
+            self._dict = {'Locus': self.locus.id,
+                          self.col_name_init: self.locus.init_mean,
+                          self.col_name_trim: self.locus.trim_mean}
+            # Remove initial coverage value
+            del self._dict[self.col_name_init]
+            self.all_covs.append(self._dict)
+
+        return self.all_covs
+
+class Locus:
+    def __init__(self, id, pos, cov):
+        self.id = id
+        self.pos = [pos]
+        self.cov = [cov]
+        self.trim_cov = []
+        self.init_mean = None
+        self.trim_mean = None
+        self.len_okay = True
+
+    def set_means(self):
+        """Calculates coverage means"""
+        self.init_mean = np.mean(np.asarray(self.cov).astype(np.float))
+        self.init_mean = round(self.init_mean, 4)
+        self.trim_mean = np.mean(np.asarray(self.trim_cov).astype(np.float))
+        self.trim_mean = round(self.trim_mean, 4)
+
+    def trim_bases(self, trim, mint):
+        self.trim = trim
+        self.mint = mint
+        self.cov_mod = self.cov[:]
+        self.locus_len = len(self.pos)
+        self.left_clip = []
+        self.right_clip = []
+
+        # Check length
+        # print(self.locus_len, self.mint, self.trim)
+        self.target_len = self.locus_len - self.mint - self.trim * 2
+        if self.target_len <= 0:
+            self.len_okay = False
+            # print("Warning: Locus {} too short ({}). Minimum initial length is {}".format(self.id, str(self.locus_len), str(self.mint + self.trim * 2)))
+        else:
+            # Remove trim from each end of locus
+            # print(self.cov)
+            # Keeps trimmed portions. Currently unused.
+            self.left_clip = []
+            self.right_clip = []
+            # Replace positions to be removed with *
+            for i in range(0, self.trim):
+                self.left_clip.append(self.cov[i])
+                self.right_clip.append(self.cov[-(i+1)])
+                self.cov_mod[i] = "*"
+                self.cov_mod[-(i+1)] = "*"
+            self.trim_cov = [y for y in self.cov_mod if y is not "*"]
+            # print(self.trim_cov)
+            self.set_means()
+            # print(np.mean(np.asarray(self.trim_cov).astype(np.float)))
+
+            # print("{} trimmed from {}bp to {}bp".format(self.id, self.locus_len, self.target_len))
+            # print("\tCoverage went from {}bp to {}bp".format(self.init_mean, self.trim_mean))
 
 
-def exclude_gene():
+def subset_by_iqr(df, column, iqr_mult=3):
+    """Remove outliers from a dataframe by column, including optional
+       whiskers, removing rows for which the column value are
+       less than Q1-1.5IQR or greater than Q3+1.5IQR.
+    Args:
+        df (`:obj:pd.DataFrame`): A pandas dataframe to subset
+        column (str): Name of the column to calculate the subset from.
+        iqr_mult (float): Optional, loosen the IQR filter by a
+                               factor of `iqr_mult` * IQR.
+    Returns:
+        (`:obj:pd.DataFrame`): Filtered dataframe
+    """
+    # Calculate Q1, Q2 and IQR
+    q1 = df[column].quantile(0.25)
+    q3 = df[column].quantile(0.75)
+    iqr = q3 - q1
+    # Apply filter with respect to IQR, including optional whiskers
+    filter = (df[column] >= q1 - iqr_mult*iqr) & (df[column] <= q3 + iqr_mult*iqr)
+    return df.loc[filter]
+
+
+def iqr_trim(df, col):
+    Q1 = df[col].quantile(0.25)
+    Q3 = df[col].quantile(0.75)
+    IQR = Q3 - Q1
+    colst = str(col)
+    filtered = df.query('(@Q1 - 1.5 * @IQR) <= @colst <= (@Q3 + 1.5 * @IQR)')
+    # print(filtered)
+    df.join(filtered, rsuffix='_filtered').boxplot()
+
+
+def exclude_gene(self):
     '''Takes a list of gene names, separated by whitespace, and returns them as a list'''
     # If ignore_gene list is empty, return None
-    if ignore_gene is None:
-        exclude_genes = [None]
-        return exclude_genes
-    ignore_genes = ignore_gene.split()
-    exclude_genes = []
+    if self.excluded_genes is None:
+        self.exclude_genes = [None]
+        return self.excluded_genes
+
     # Populate list of excluded genes
-    if ignore_genes is not None:
-        for gene in ignore_genes:
-            exclude_genes.append(gene)
-    return exclude_genes
-
-
-def populate_and_rename(in_file):
-    '''Opens basecov file and populates dict of genes and coverages,
-    and renames, if necessary'''
-
-    exclude_genes = exclude_gene()
-    pos_dict = collections.OrderedDict()
-
-    with open(in_file, 'r') as f:
-        for line in f:
-            include = True
-            # Ignore header line
-            if "#" not in line:
-                gene_id, pos, cov = line.strip().split()
-                # Rename gene_id if found in tname_dict
-                cov = int(cov)
-                if gene_id not in pos_dict and gene_id not in exclude_genes:
-                    for exc_gene in exclude_genes:
-                        if exc_gene.strip() in gene_id.strip():
-                            if inexact_match is True:
-                                include = False
-                    if include is True:
-                        pos_dict[gene_id] = [cov]
-                        #print gene_id
-
-                elif gene_id in pos_dict and gene_id not in exclude_genes and include is True:
-                    for exc_gene in exclude_genes:
-                        if exc_gene.strip() in gene_id.strip():
-                            print(exc_gene, gene_id)
-                        else:
-                            pos_dict[gene_id].append(cov)
-
-    return pos_dict
+    self.excluded_genes = self.excluded_genes.split()
+    return self.excluded_genes
 
 
 def trim(covs_in, gene_id, trim_size, trim_fract):
-    """Main trimming function. Takes trim parameters and returns a trimmed 
-    internal window for each gene."""
-    
-
     covs = covs_in[:]
     cov_len = len(covs_in)
     trim_covs = covs_in[trim_size:len(covs)-trim_size]
+    #trim_covs_len = len(trim_covs)
     trim_covs_len = len(covs_in)
     trim_window = int(round(trim_covs_len*(1-trim_fract)))
 
@@ -139,171 +208,143 @@ def trim(covs_in, gene_id, trim_size, trim_fract):
             covs[i] = "*"
             covs[-(i+1)] = "*"
     else:
-        for i in range(0, int(trim_window/2)):
+        for i in range(0, trim_window/2):
             left_clip.append(covs[i])
             right_clip.append(covs[-(i+1)])
             covs[i] = "*"
             covs[-(i+1)] = "*"
 
-    if print_basecov is True: 
-        pos = 0
-        for cov in covs_in:
-            print("{}\t{}\t{}".format(gene_id, pos, cov))
-            pos = pos+1
-
-        for tcov in covs:
-            print("{}\t{}\t{}".format(gene_id+"_trimmed", pos, tcov))
-            pos = pos+1
-
-
     window_covs = [y for y in covs if y is not "*"]
     win_mean = np.mean(window_covs)
-
-    if print_trim_covs is True:
-        left_mean = np.mean(left_clip)
-        right_mean = np.mean(right_clip)
-        print(gene_id)
-        print("\tTrimmed {}\tLen: {} Center: {} Fraction: {} Trim Window: {} Rep Count: {}".format(gene_id, cov_len, cov_len/2, trim_fract, trim_window, covs.count("*"))) 
-        print("\tMeans Window: {} Left: {} Right: {}".format(win_mean, left_mean, right_mean))
-
 
     return window_covs
 
 
-def print_pos_varpar(in_file, trim_sizes, trim_fracts):
-    # trim_size = args.min_trim_size
-    # trim_fraction = args.trim_fraction
-
-    entry_list = []
-    pos_dict = populate_and_rename(in_file)
-    
-    header_list = ["#ID", "Length_Init", "Cov_Init", "PerBase_Init"]
-    for temp_trim_size in trim_sizes:
-        for temp_trim_fract in trim_fracts:
-            len_name = "Length_Tr{}Fr{}\tCov_Tr{}Fr{}\tPerBase_Tr{}Fr{}".format(temp_trim_size, temp_trim_fract, temp_trim_size, temp_trim_fract, temp_trim_size, temp_trim_fract)
-            len_name = len_name.split("\t")
-            header_list.extend(len_name)
-    for key in pos_dict:
-        covs = pos_dict[key]
-        raw_mean_cov = np.mean(covs)
-        init_entry = [key, str(len(covs)), str(raw_mean_cov), str(len(covs)*raw_mean_cov)]
-        entry_list.append(init_entry)
-        trim_sizes_entries = []
-        for temp_trim_size in trim_sizes:
-            for temp_trim_fract in trim_fracts:
-                trim_size = temp_trim_size
-                if len(covs) > trim_size*2:
-                    trim_cov = trim(covs, key, trim_size, temp_trim_fract)
-                else:
-                    trim_cov = [0]
-                trim_sizes_entries.append( str(len(trim_cov)) )
-                trim_sizes_entries.append( str(np.mean(trim_cov)) )
-                trim_sizes_entries.append( str(np.mean(trim_cov)*len(trim_cov) ))
-
-        init_entry.extend(trim_sizes_entries)
-
-    seq_name = in_file.split('/')[-1]
-
-    per_file_entry = []
-    per_file_entry.append(header_list)
-
-    if print_stats is True:
-        print("\n{} Mapping Statistics".format(seq_name))
-        print('\t'.join(header_list))
-
-    for entry in entry_list:
-        if print_stats is True:
-            print('\t'.join(entry))
-        per_file_entry.append(entry)
-
-    per_file_array = np.array(per_file_entry)
-
-
-    return per_file_array
-
-
-def print_summary(in_array):
-    print("Trim Parameters\tMean")
-    for x in in_array.T[1:]:
-        col = x[1:]
-        col = col.astype('f')
-        if "Cov" in x[0]:
-            print("{}\t{}".format(x[0], np.mean(col)))
-
-
-def dir_print_summary(in_array, seq_name):
-    ret_list = []
-
-    ret_list.append(["Coverage", seq_name])
-    for x in in_array.T[1:]:
-        col = x[1:]
-        col = col.astype('f')
-
-        if "Cov" in x[0]:
-            ret_list.append([x[0], str(np.mean(col).item())])
-
-    if perbase is True:
-        for i, x in enumerate(in_array.T[1:]):
-            col = x[1:]
-            col = col.astype('f')
-            if "PerBase" in x[0]:
-                len_col = in_array[1:,i-1]
-                len_col_int = [ int(y) for y in len_col ]
-                perbase_cov = sum(col)/sum(len_col_int)
-                ret_list.append( [x[0], str(perbase_cov)])
-
-
-    return ret_list
-
-
-def slistdir(directory):
-    """os.listdir() that ignores files that
-    start with a leading period."""
-    filelist = os.listdir(directory)
-    return [x for x in filelist
-            if not (x.startswith('.'))]
-
-
-def check_for_fraction():
-    for fract in trim_fraction:
-        if fract <= 1 and fract >= 0:
-            pass
-        else:
-            raise ValueError('trim_fraction must be between 0 and 1')
-
-
-
 def main():
-    print("")
-    check_for_fraction()
-    if os.path.isdir(in_basecov) is True and os.path.isfile(in_basecov) is False:
-        print("Processing directory: {}".format(in_basecov))
-        cov_summaries = []
-        for in_file in slistdir(in_basecov):
-            if basecov_text in in_file:
-                in_file = os.path.join(in_basecov, in_file)
-                seq_name = in_file.split('/')[-1].split("_" + basecov_text)[0]
-                output = print_pos_varpar(in_file, [trim_size], trim_fraction)
+    parser = argparse.ArgumentParser(description="Removes a specified number of bases from the end of each gene in a BBMap base coverage file")
 
-                temp_covs = dir_print_summary(output, seq_name)
-                if any(cov_summaries) is False:
-                    for cov in temp_covs:
-                        cov_summaries.append(cov)
-                else:
-                    for i, cov in enumerate(temp_covs):
-                        cov_summaries[i].append(str(cov[1]))
-        print("\n")
-        tp_cov_sum = list(map(list, list(zip(*cov_summaries))))
-        for line in tp_cov_sum:
-            print("\t".join(line))
-    else:
-        for in_file in in_basecov.split():
-            print("Processing file: {}\n".format(in_basecov))
-            seq_name = in_file
-            output = print_pos_varpar(in_file, [trim_size], trim_fraction)
-            print_summary(output)
+    parser.add_argument("-basecov", "-i",
+                        help="Base coverage file.",
+                        type=str)
 
-    print("\nDone  ")
+    parser.add_argument("-exclude", "-e", default="trimmed_18S_MLSG_ trimmed_28S_MLSG_ trimmed_COI_MLSG_",
+                        help="Optional list of gene names to ignore.",
+                        type=str)
+
+    parser.add_argument("-iqr", default=1.5,
+                        help="IQR coefficient for excluding outliers.",
+                        type=float)
+
+    parser.add_argument("-trim", default=75,
+                        help="Number of bases to remove from each end of locus.",
+                        type=int)
+
+    parser.add_argument("-min", default=100,
+                        help="Minimum number of bases to retain a locus after trimming.",
+                        type=int)
+
+    parser.add_argument("-out", "-o",
+                        help="Output name.", default="GSEC_out",
+                        type=str)
+
+    # parser.add_argument('--print-stats', dest='print_stats', action='store_true', help="Print detailed coverage information")
+
+    # def check_fraction(value):
+    #     fvalue = float(value)
+    #     if fvalue > 1 or fvalue < 0:
+    #         raise argparse.ArgumentTypeError("%s is an invalid fraction value. Enter a number between 0 and 1" % fvalue)
+    #     return fvalue
+    #
+    # parser.add_argument("-trim_fraction", "-f", default=1, type=check_fraction,
+    #                     help="Fraction of bases to retain from center of gene. Set\
+    #                     to 1 to use all bases minus minimal terminal cutoff")
+
+    # parser.set_defaults(print_stats=False)
+
+    args = parser.parse_args()
+
+    global trim_fraction, basecov, exclude, trim, iqr, mint
+
+    trim_fraction = 1
+    basecov = args.basecov
+    exclude = args.exclude
+    # print_stats = args.print_stats
+    trim = args.trim
+    iqr = args.iqr
+
+    mint = args.min
+    outname = args.out
+
+    # trim_fraction = 1
+    # basecov = "/Users/MaddisonLab/Documents/JMP/gsec_v0.3/gsec2/regier_baseco"
+    # exclude = "trimmed_18S_MLSG_ trimmed_28S_MLSG_ trimmed_COI_MLSG_"
+    # trim = 75
+    # iqr = 1.5
+    # mint = 100
+
+    # in_basecovs = [x for x in os.listdir(basecov) if not (x.startswith(".")) and if os.path.isfile(x)]
+    in_basecovs = [os.path.join(basecov, f) for f in os.listdir(basecov) if os.path.isfile(os.path.join(basecov, f)) and not f.startswith(".")]
+
+    all_sp = []
+    all_sp_orig = []
+
+    for sp in in_basecovs:
+        Sp = Specimen(sp)
+        Sp.initialize_loci()
+        Sp.trim_loci()
+        df_or = pd.DataFrame.from_dict(Sp.sp_mean()).set_index('Locus')
+        for _col in df_or.columns:
+            df = subset_by_iqr(df_or, _col, iqr)
+
+        all_sp.append(df)
+        all_sp_orig.append(df_or)
+
+    df_merged = reduce(lambda left,right: pd.merge(left,right,on=['Locus'],
+                                                how='outer'), all_sp)
+
+    df_means = df_merged.mean(skipna=True)
+
+    print(df_means.to_csv(sep="\t", header=False).strip())
+
+    outfile_name = outname + "_coverages.txt"
+    with open(outfile_name, "w+") as f:
+        f.write(df_means.to_csv(sep="\t", header=False))
+
+    #Create boxplot
+
+    df_or_merged = reduce(lambda left,right: pd.merge(left,right,on=['Locus'],
+                                                how='outer'), all_sp_orig)
+    df_graph = df_or_merged.melt(var_name='Specimen', value_name='Coverage')
+
+    fig = px.box(df_graph, y='Coverage', x='Specimen', title="OrthoDB")
+
+    fig.update_xaxes(title_font=dict(size=18, family='Helvetica'))
+    fig.update_yaxes(title_font=dict(size=18, family='Helvetica'))
+    fig.update_xaxes(tickangle=270, tickfont=dict(family='Helvetica', size=12))
+
+    fig.update_layout(
+        autosize=False,
+        width=500,
+        height=700,
+        plot_bgcolor='rgba(0,0,0,0)',
+        title=go.layout.Title(
+        text="Locus Coverage",
+        xref="paper",
+        x=0.5
+        )
+        )
+
+    fig.update_xaxes(automargin=True, linecolor="LightGray", mirror=True)
+    fig.update_yaxes(automargin=True, gridcolor="LightGray", linecolor="LightGray", mirror=True)
+
+    fig.update_traces(go.Box(marker=dict(
+                                        outliercolor="Grey", color="Red", line=dict(outlierwidth=0.1, color="Green")),
+                            line=dict(color="Red", width=1.2)),
+                            line=dict(color="Gray")
+                            )
+
+    fig
+    fig.write_image(outname + "_coverage_boxplot.pdf")
 
 
 if __name__ == "__main__":
@@ -321,3 +362,5 @@ if __name__ == "__main__":
 
 
 
+
+#

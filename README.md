@@ -5,3 +5,20 @@ A script to trim and estimate genome sequencing coverage from a base coverage fi
 Trimming the ends of coverage pileups is often necessary since read mapping programs tend to struggle when extending contigs beyond reference sequences, as seen below. This decrease in coverage can cause the apparent overall coverage of the contig to be artificially low. GSEC.py removes these low-coverage positions by removing bases from both ends and/or retaining only a certain percentage of positions from the middle of the contig, and calculates a corrected coverage for each contig.
 
 ![Per base read mapping coverage for several loci](https://github.com/JMPflug/genome_size_estimation_from_coverage/blob/master/Fig.%20FX1.%20BembidionCoverageSimplified.png)
+
+Arguments
+
+  -basecov BASECOV, -i BASECOV
+                        Base coverage file.
+                        
+  -exclude EXCLUDE, -e EXCLUDE
+                        Optional list of gene names to ignore.
+                        
+  -iqr IQR              IQR coefficient for excluding outliers.
+  
+  -trim TRIM            Number of bases to remove from each end of locus.
+  
+  -min MIN              Minimum number of bases to retain a locus after
+                        trimming.
+                        
+  -out OUT, -o OUT      Output name.

@@ -6,6 +6,7 @@ Trimming the ends of coverage pileups is often necessary since read mapping prog
 
 ![Per base read mapping coverage for several loci](https://github.com/JMPflug/genome_size_estimation_from_coverage/blob/master/Fig.%20FX1.%20BembidionCoverageSimplified.png)
 
+```
 Arguments
 
   -basecov BASECOV, -i BASECOV
@@ -22,3 +23,4 @@ Arguments
                         trimming.
                         
   -out OUT, -o OUT      Output name.
+```
